@@ -1,0 +1,839 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Previsões Banco de Brasília - Análise LSTM</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #1e40af;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --warning-color: #f59e0b;
+            --dark-bg: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --border-color: #334155;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Header Styles */
+        .header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(37, 99, 235, 0.3);
+            margin-bottom: 30px;
+            animation: slideDown 0.8s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: rotate 20s linear infinite;
+        }
+
+        .header-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            font-weight: 800;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header-subtitle {
+            font-size: 1.1em;
+            opacity: 0.95;
+            margin-bottom: 20px;
+        }
+
+        .badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            backdrop-filter: blur(10px);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 50px;
+            font-size: 0.9em;
+            font-weight: 600;
+            margin: 5px;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        /* Stats Cards */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 15px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+            animation: fadeInUp 0.6s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-color), var(--success-color));
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.85em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 5px;
+        }
+
+        .stat-change {
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+
+        .stat-change.positive {
+            color: var(--success-color);
+        }
+
+        .stat-change.negative {
+            color: var(--danger-color);
+        }
+
+        /* Chart Container */
+        .chart-section {
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 15px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            animation: fadeInUp 0.8s ease;
+        }
+
+        .section-title {
+            font-size: 1.8em;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 30px;
+            background: linear-gradient(180deg, var(--primary-color), var(--success-color));
+            border-radius: 2px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-bottom: 20px;
+        }
+
+        /* Table Styles */
+        .table-container {
+            overflow-x: auto;
+            background: var(--card-bg);
+            border-radius: 15px;
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            animation: fadeInUp 1s ease;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95em;
+        }
+
+        thead {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+        }
+
+        th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.85em;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid var(--border-color);
+            transition: background 0.3s ease;
+        }
+
+        tr:hover td {
+            background: rgba(37, 99, 235, 0.1);
+        }
+
+        .metric-value {
+            font-weight: 600;
+            font-family: 'Courier New', monospace;
+        }
+
+        .positive {
+            color: var(--success-color);
+        }
+
+        .negative {
+            color: var(--danger-color);
+        }
+
+        /* Warning Box */
+        .warning-box {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%);
+            border: 2px solid var(--warning-color);
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 30px;
+            animation: fadeInUp 1.2s ease;
+        }
+
+        .warning-box h3 {
+            color: var(--warning-color);
+            margin-bottom: 15px;
+            font-size: 1.3em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .warning-box p {
+            color: var(--text-secondary);
+            line-height: 1.8;
+            margin-bottom: 10px;
+        }
+
+        /* Animations */
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes rotate {
+            from {
+                transform: rotate(0deg);
+            }
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.6;
+            }
+        }
+
+        /* Loading Animation */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .chart-container {
+                height: 300px;
+            }
+            
+            table {
+                font-size: 0.85em;
+            }
+            
+            th, td {
+                padding: 10px;
+            }
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-secondary);
+            font-size: 0.9em;
+            margin-top: 50px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .stock-symbol {
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: var(--card-bg);
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+
+        .tab:hover {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .tab.active {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-content">
+                <h1>🏦 Previsões Banco de Brasília</h1>
+                <p class="header-subtitle">Análise Preditiva com Redes Neurais LSTM</p>
+                <div>
+                    <span class="badge">✅ DADOS REAIS</span>
+                    <span class="badge">🤖 Deep Learning</span>
+                    <span class="badge">📊 2 Ativos</span>
+                </div>
+                <p style="margin-top: 15px; font-size: 0.9em;">
+                    <strong>Gerado em:</strong> 24/11/2025 22:48:44
+                </p>
+            </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="stats-grid">
+
+            <div class="stat-card">
+                <div class="stat-label">BSLI3 (Ordinária)</div>
+                <div class="stat-value">R$ 8.09</div>
+                <div class="stat-change positive">
+                    📈 +11.52%
+                    <span style="font-size: 0.85em; opacity: 0.8;">
+                        (15 dias)
+                    </span>
+                </div>
+                <div style="margin-top: 15px; font-size: 0.85em; color: var(--text-secondary);">
+                    <div>Último: R$ 7.25</div>
+                    <div>Mín: R$ 7.80 | Máx: R$ 8.36</div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-label">BSLI4 (Preferencial)</div>
+                <div class="stat-value">R$ 8.19</div>
+                <div class="stat-change positive">
+                    📈 +3.73%
+                    <span style="font-size: 0.85em; opacity: 0.8;">
+                        (15 dias)
+                    </span>
+                </div>
+                <div style="margin-top: 15px; font-size: 0.85em; color: var(--text-secondary);">
+                    <div>Último: R$ 7.90</div>
+                    <div>Mín: R$ 8.09 | Máx: R$ 8.34</div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Charts Section -->
+        <div class="chart-section">
+            <h2 class="section-title">📊 Análise Gráfica Interativa</h2>
+            <div class="tabs">
+
+                <div class="tab active" onclick="showChart('BSLI3')">BSLI3 (Ordinária)</div>
+
+                <div class="tab " onclick="showChart('BSLI4')">BSLI4 (Preferencial)</div>
+
+            </div>
+
+            <div id="chart-BSLI3" class="chart-container" style="display: block;">
+                <canvas id="canvas-BSLI3"></canvas>
+            </div>
+
+            <div id="chart-BSLI4" class="chart-container" style="display: none;">
+                <canvas id="canvas-BSLI4"></canvas>
+            </div>
+
+        </div>
+
+        <!-- Model Metrics Table -->
+        <div class="table-container">
+            <h2 class="section-title">🏗️ Métricas de Performance do Modelo</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Ação</th>
+                        <th>RMSE Treino</th>
+                        <th>RMSE Teste</th>
+                        <th>MAE Teste</th>
+                        <th>Overfitting Ratio</th>
+                        <th>Tempo Treino</th>
+                    </tr>
+                </thead>
+                <tbody>
+
+                    <tr>
+                        <td><strong class="stock-symbol">BSLI3 (Ordinária)</strong></td>
+                        <td class="metric-value">R$ 0.9744</td>
+                        <td class="metric-value">R$ 0.8372</td>
+                        <td class="metric-value">R$ 0.6745</td>
+                        <td class="metric-value positive">0.86</td>
+                        <td>11.3s</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong class="stock-symbol">BSLI4 (Preferencial)</strong></td>
+                        <td class="metric-value">R$ 1.0037</td>
+                        <td class="metric-value">R$ 0.3076</td>
+                        <td class="metric-value">R$ 0.2651</td>
+                        <td class="metric-value positive">0.31</td>
+                        <td>10.3s</td>
+                    </tr>
+
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Predictions Statistics Table -->
+        <div class="table-container">
+            <h2 class="section-title">📈 Estatísticas das Previsões (15 dias)</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Ação</th>
+                        <th>Preço Atual</th>
+                        <th>Média Prevista</th>
+                        <th>Mediana</th>
+                        <th>Desvio Padrão</th>
+                        <th>Mínimo</th>
+                        <th>Máximo</th>
+                        <th>Variação Esperada</th>
+                    </tr>
+                </thead>
+                <tbody>
+
+                    <tr>
+                        <td><strong class="stock-symbol">BSLI3 (Ordinária)</strong></td>
+                        <td class="metric-value">R$ 7.25</td>
+                        <td class="metric-value">R$ 8.09</td>
+                        <td class="metric-value">R$ 8.09</td>
+                        <td class="metric-value">R$ 0.1876</td>
+                        <td class="metric-value">R$ 7.80</td>
+                        <td class="metric-value">R$ 8.36</td>
+                        <td class="metric-value positive"><strong>+11.52%</strong></td>
+                    </tr>
+
+                    <tr>
+                        <td><strong class="stock-symbol">BSLI4 (Preferencial)</strong></td>
+                        <td class="metric-value">R$ 7.90</td>
+                        <td class="metric-value">R$ 8.19</td>
+                        <td class="metric-value">R$ 8.18</td>
+                        <td class="metric-value">R$ 0.0824</td>
+                        <td class="metric-value">R$ 8.09</td>
+                        <td class="metric-value">R$ 8.34</td>
+                        <td class="metric-value positive"><strong>+3.73%</strong></td>
+                    </tr>
+
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Data Summary Table -->
+        <div class="table-container">
+            <h2 class="section-title">📊 Resumo dos Dados Históricos</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Ação</th>
+                        <th>Registros</th>
+                        <th>Período</th>
+                        <th>Preço Médio</th>
+                        <th>Volatilidade</th>
+                        <th>Preço Min</th>
+                        <th>Preço Max</th>
+                    </tr>
+                </thead>
+                <tbody>
+
+                    <tr>
+                        <td><strong class="stock-symbol">BSLI3 (Ordinária)</strong></td>
+                        <td>318</td>
+                        <td>19/08/2024 - 24/11/2025</td>
+                        <td class="metric-value">R$ 8.34</td>
+                        <td class="metric-value">R$ 0.9723</td>
+                        <td class="metric-value">R$ 6.74</td>
+                        <td class="metric-value">R$ 13.20</td>
+                    </tr>
+
+                    <tr>
+                        <td><strong class="stock-symbol">BSLI4 (Preferencial)</strong></td>
+                        <td>211</td>
+                        <td>09/12/2024 - 24/11/2025</td>
+                        <td class="metric-value">R$ 8.53</td>
+                        <td class="metric-value">R$ 1.2551</td>
+                        <td class="metric-value">R$ 5.79</td>
+                        <td class="metric-value">R$ 12.49</td>
+                    </tr>
+
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Warning Box -->
+        <div class="warning-box">
+            <h3>⚠️ Aviso Legal Importante</h3>
+            <p><strong>Este sistema utiliza dados reais e técnicas avançadas de deep learning, porém é destinado exclusivamente para fins educacionais e de pesquisa.</strong></p>
+            <p>As previsões geradas por este modelo NÃO constituem recomendação de investimento ou aconselhamento financeiro profissional. O mercado de ações é altamente volátil e imprevisível.</p>
+            <p><strong>Desempenho passado não garante resultados futuros.</strong> Sempre consulte um profissional qualificado (assessor de investimentos certificado) antes de tomar qualquer decisão de investimento.</p>
+            <p style="margin-top: 15px; font-size: 0.9em; opacity: 0.8;">
+                <strong>Metodologia:</strong> Rede Neural LSTM com 365 dias de histórico, divisão 70/30 treino/teste, 
+                15 indicadores técnicos incluindo médias móveis, RSI, MACD e Bandas de Bollinger.
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>🤖 Sistema desenvolvido com TensorFlow & Keras | 📊 Dados: InfoMoney & Yahoo Finance</p>
+            <p style="margin-top: 10px; opacity: 0.7;">Previsões de curto prazo (15 dias úteis) usando Deep Learning</p>
+        </div>
+    </div>
+
+    <script>
+        // Chart.js Configuration
+        const chartConfig = {
+            type: 'line',
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            color: '#f1f5f9',
+                            font: {
+                                size: 12,
+                                weight: '600'
+                            },
+                            padding: 15,
+                            usePointStyle: true,
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                        titleColor: '#f1f5f9',
+                        bodyColor: '#cbd5e1',
+                        borderColor: '#334155',
+                        borderWidth: 1,
+                        padding: 12,
+                        displayColors: true,
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += 'R$ ' + context.parsed.y.toFixed(2);
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'day',
+                            displayFormats: {
+                                day: 'dd/MM'
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(51, 65, 85, 0.3)',
+                            drawBorder: false,
+                        },
+                        ticks: {
+                            color: '#cbd5e1',
+                            font: {
+                                size: 11
+                            }
+                        }
+                    },
+                    y: {
+                        grid: {
+                            color: 'rgba(51, 65, 85, 0.3)',
+                            drawBorder: false,
+                        },
+                        ticks: {
+                            color: '#cbd5e1',
+                            font: {
+                                size: 11
+                            },
+                            callback: function(value) {
+                                return 'R$ ' + value.toFixed(2);
+                            }
+                        }
+                    }
+                },
+                animation: {
+                    duration: 2000,
+                    easing: 'easeInOutQuart'
+                }
+            }
+        };
+
+        // Data for charts
+        const chartData = {
+
+            'BSLI3': {
+                historical: {
+                    dates: ['2025-07-21', '2025-07-22', '2025-07-23', '2025-07-24', '2025-07-25', '2025-07-28', '2025-07-29', '2025-07-30', '2025-07-31', '2025-08-01', '2025-08-04', '2025-08-05', '2025-08-06', '2025-08-07', '2025-08-08', '2025-08-11', '2025-08-12', '2025-08-13', '2025-08-14', '2025-08-15', '2025-08-18', '2025-08-19', '2025-08-20', '2025-08-21', '2025-08-22', '2025-08-25', '2025-08-26', '2025-08-27', '2025-08-28', '2025-08-29', '2025-09-01', '2025-09-02', '2025-09-03', '2025-09-04', '2025-09-05', '2025-09-08', '2025-09-09', '2025-09-10', '2025-09-11', '2025-09-12', '2025-09-15', '2025-09-16', '2025-09-17', '2025-09-18', '2025-09-19', '2025-09-22', '2025-09-23', '2025-09-24', '2025-09-25', '2025-09-26', '2025-09-29', '2025-09-30', '2025-10-01', '2025-10-02', '2025-10-03', '2025-10-06', '2025-10-07', '2025-10-08', '2025-10-09', '2025-10-10', '2025-10-13', '2025-10-14', '2025-10-15', '2025-10-16', '2025-10-17', '2025-10-20', '2025-10-21', '2025-10-22', '2025-10-23', '2025-10-24', '2025-10-27', '2025-10-28', '2025-10-29', '2025-10-30', '2025-10-31', '2025-11-03', '2025-11-04', '2025-11-05', '2025-11-06', '2025-11-07', '2025-11-10', '2025-11-11', '2025-11-12', '2025-11-13', '2025-11-14', '2025-11-17', '2025-11-18', '2025-11-19', '2025-11-21', '2025-11-24'],
+                    values: [7.492230415344238, 7.4727702140808105, 8.17334270477295, 8.163612365722656, 8.163612365722656, 7.4825005531311035, 7.930088043212891, 7.803596496582031, 8.270644187927246, 7.969008445739746, 8.056580543518066, 8.027390480041504, 8.007928848266602, 8.46524715423584, 8.708501815795898, 8.416596412658691, 8.406867027282715, 8.007928848266602, 8.095500946044922, 8.46524715423584, 8.46524715423584, 8.951756477355957, 8.513898849487305, 8.105231285095215, 8.630660057067871, 8.504168510437012, 8.36794662475586, 8.319294929504395, 8.319294929504395, 8.153882026672363, 9.214470863342285, 9.613408088684082, 10.498852729797363, 10.199999809265137, 10.0, 9.5, 9.260000228881836, 9.300000190734863, 9.319999694824219, 9.319999694824219, 9.319999694824219, 9.34000015258789, 9.539999961853027, 9.180000305175781, 9.180000305175781, 9.199999809265137, 9.210000038146973, 9.140000343322754, 9.140000343322754, 9.220000267028809, 9.25, 9.25, 9.25, 9.09000015258789, 9.09000015258789, 9.199999809265137, 8.9399995803833, 8.899999618530273, 8.899999618530273, 9.0, 9.239999771118164, 8.970000267028809, 8.710000038146973, 8.699999809265137, 8.920000076293945, 8.550000190734863, 8.550000190734863, 8.600000381469727, 8.600000381469727, 8.600000381469727, 8.609999656677246, 9.0, 9.239999771118164, 9.0, 8.819999694824219, 8.819999694824219, 8.770000457763672, 8.6899995803833, 8.710000038146973, 8.789999961853027, 8.65999984741211, 8.65999984741211, 8.399999618530273, 8.40999984741211, 8.170000076293945, 8.149999618530273, 8.069999694824219, 7.639999866485596, 7.329999923706055, 7.25]
+                },
+                predictions: {
+                    dates: ['2025-11-25', '2025-11-26', '2025-11-27', '2025-11-28', '2025-12-01', '2025-12-02', '2025-12-03', '2025-12-04', '2025-12-05', '2025-12-08', '2025-12-09', '2025-12-10', '2025-12-11', '2025-12-12', '2025-12-15'],
+                    values: [8.355600718232267, 8.332149932881038, 8.301564968219651, 8.264830732759492, 8.223430755785415, 8.17892863496155, 8.13270171984476, 8.086014724690614, 8.039889846172684, 7.995151181580923, 7.952418658655716, 7.910035122096019, 7.8703451012314645, 7.833657789117524, 7.800033116598854]
+                }
+            },
+
+            'BSLI4': {
+                historical: {
+                    dates: ['2025-07-16', '2025-07-17', '2025-07-18', '2025-07-21', '2025-07-22', '2025-07-23', '2025-07-24', '2025-07-25', '2025-07-28', '2025-07-29', '2025-07-30', '2025-07-31', '2025-08-01', '2025-08-04', '2025-08-05', '2025-08-06', '2025-08-07', '2025-08-08', '2025-08-11', '2025-08-12', '2025-08-13', '2025-08-14', '2025-08-18', '2025-08-19', '2025-08-20', '2025-08-21', '2025-08-22', '2025-08-26', '2025-08-27', '2025-08-28', '2025-08-29', '2025-09-01', '2025-09-02', '2025-09-03', '2025-09-04', '2025-09-05', '2025-09-08', '2025-09-09', '2025-09-10', '2025-09-11', '2025-09-12', '2025-09-15', '2025-09-16', '2025-09-17', '2025-09-18', '2025-09-19', '2025-09-22', '2025-09-23', '2025-09-24', '2025-09-25', '2025-09-26', '2025-09-29', '2025-09-30', '2025-10-01', '2025-10-02', '2025-10-03', '2025-10-06', '2025-10-07', '2025-10-08', '2025-10-09', '2025-10-10', '2025-10-13', '2025-10-14', '2025-10-15', '2025-10-16', '2025-10-20', '2025-10-21', '2025-10-22', '2025-10-23', '2025-10-24', '2025-10-27', '2025-10-28', '2025-10-29', '2025-10-30', '2025-10-31', '2025-11-03', '2025-11-04', '2025-11-05', '2025-11-06', '2025-11-07', '2025-11-10', '2025-11-11', '2025-11-12', '2025-11-13', '2025-11-14', '2025-11-17', '2025-11-18', '2025-11-19', '2025-11-21', '2025-11-24'],
+                    values: [8.20022964477539, 7.87922477722168, 7.85004186630249, 7.733312606811523, 7.674948215484619, 8.589326858520508, 8.589326858520508, 8.132137298583984, 7.811131954193115, 8.20022964477539, 8.958970069885254, 9.095154762268066, 8.735238075256348, 10.272174835205078, 9.241065979003906, 9.7177095413208, 9.241065979003906, 9.007607460021973, 9.25079345703125, 9.143791198730469, 9.289703369140625, 9.62043571472168, 9.7177095413208, 9.727437973022461, 10.816910743713379, 10.729363441467285, 9.921985626220703, 9.921985626220703, 9.921985626220703, 9.610708236694336, 9.532889366149902, 10.16517162322998, 11.176825523376465, 11.429738998413086, 10.84000015258789, 10.149999618530273, 10.350000381469727, 10.039999961853027, 10.25, 10.0, 9.930000305175781, 9.770000457763672, 9.699999809265137, 9.699999809265137, 9.630000114440918, 9.5, 9.529999732971191, 9.930000305175781, 9.4399995803833, 9.289999961853027, 9.359999656677246, 9.890000343322754, 9.300000190734863, 9.109999656677246, 9.15999984741211, 9.180000305175781, 9.90999984741211, 9.270000457763672, 9.210000038146973, 9.40999984741211, 9.15999984741211, 9.050000190734863, 9.210000038146973, 9.600000381469727, 9.5, 9.029999732971191, 9.399999618530273, 9.029999732971191, 8.979999542236328, 8.699999809265137, 8.5, 8.539999961853027, 8.550000190734863, 8.539999961853027, 8.59000015258789, 8.5, 8.369999885559082, 9.0, 8.5, 8.609999656677246, 8.420000076293945, 8.300000190734863, 8.220000267028809, 8.140000343322754, 8.399999618530273, 8.199999809265137, 8.300000190734863, 8.239999771118164, 7.78000020980835, 7.900000095367432]
+                },
+                predictions: {
+                    dates: ['2025-11-25', '2025-11-26', '2025-11-27', '2025-11-28', '2025-12-01', '2025-12-02', '2025-12-03', '2025-12-04', '2025-12-05', '2025-12-08', '2025-12-09', '2025-12-10', '2025-12-11', '2025-12-12', '2025-12-15'],
+                    values: [8.342814662933733, 8.316437761652196, 8.290782815872518, 8.266124158086598, 8.242679593807964, 8.220624886609983, 8.20005083295166, 8.18100901370076, 8.16350879113807, 8.147529144293514, 8.133020082120595, 8.119909532721891, 8.108122421204257, 8.097566891227842, 8.08814543375496]
+                }
+            },
+
+        };
+
+        // Initialize charts
+        const charts = {};
+        
+        function initCharts() {
+            Object.keys(chartData).forEach(symbol => {
+                const ctx = document.getElementById(`canvas-${symbol}`);
+                if (!ctx) return;
+                
+                const data = chartData[symbol];
+                
+                charts[symbol] = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        datasets: [
+                            {
+                                label: 'Histórico Real',
+                                data: data.historical.dates.map((date, i) => ({
+                                    x: date,
+                                    y: data.historical.values[i]
+                                })),
+                                borderColor: '#3b82f6',
+                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                borderWidth: 3,
+                                pointRadius: 4,
+                                pointHoverRadius: 6,
+                                pointBackgroundColor: '#3b82f6',
+                                tension: 0.4,
+                                fill: true
+                            },
+                            {
+                                label: 'Previsões LSTM',
+                                data: data.predictions.dates.map((date, i) => ({
+                                    x: date,
+                                    y: data.predictions.values[i]
+                                })),
+                                borderColor: '#f59e0b',
+                                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                                borderWidth: 3,
+                                borderDash: [5, 5],
+                                pointRadius: 5,
+                                pointHoverRadius: 7,
+                                pointBackgroundColor: '#f59e0b',
+                                pointStyle: 'rect',
+                                tension: 0.4,
+                                fill: true
+                            }
+                        ]
+                    },
+                    options: chartConfig.options
+                });
+            });
+        }
+
+        // Tab switching function
+        function showChart(symbol) {
+            // Hide all charts
+            document.querySelectorAll('.chart-container').forEach(chart => {
+                chart.style.display = 'none';
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected chart
+            document.getElementById(`chart-${symbol}`).style.display = 'block';
+            
+            // Add active class to clicked tab
+            event.target.classList.add('active');
+            
+            // Update chart
+            if (charts[symbol]) {
+                charts[symbol].update();
+            }
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            initCharts();
+            
+            // Smooth scroll animation for elements
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.style.opacity = '1';
+                        entry.target.style.transform = 'translateY(0)';
+                    }
+                });
+            }, {
+                threshold: 0.1
+            });
+            
+            document.querySelectorAll('.stat-card, .chart-section, .table-container').forEach(el => {
+                observer.observe(el);
+            });
+        });
+
+        // Add loading animation
+        window.addEventListener('load', function() {
+            document.body.style.opacity = '1';
+        });
+    </script>
+</body>
+</html>
